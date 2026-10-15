@@ -1,0 +1,12 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+# Model weights are user-exported (AGPL / licence-specific) and not committed.
+/app/src/main/assets/*.tflite

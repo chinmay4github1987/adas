@@ -1,0 +1,3 @@
+Place your exported detector here as:  yolo_detector.tflite
+(see README.md -> "Exporting a detector model"). Labels: coco_labels.txt (80 COCO classes, one per line).
+Optional lane model (UFLD v2, not yet wired): ufld_v2.tflite

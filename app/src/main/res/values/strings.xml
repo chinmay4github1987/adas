@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DriveSentinel</string>
+    <string name="notif_channel_name">Drive session</string>
+    <string name="notif_channel_desc">Shows while DriveSentinel is recording and monitoring the road.</string>
+    <string name="notif_title">DriveSentinel is active</string>
+    <string name="notif_text">Recording loop + driver alerts running. Tap to open.</string>
+    <string name="notif_stop">Stop</string>
+</resources>

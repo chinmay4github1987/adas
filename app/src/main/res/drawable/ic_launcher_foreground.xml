@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "road + eye" glyph. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/ic_fg"
+        android:pathData="M48,30h12l10,48h-8l-2,-10h-12l-2,10h-8z M50,62h8l-2,-10h-4z" />
+    <path
+        android:fillColor="#FFFF1744"
+        android:pathData="M30,30h4v48h-4z M74,30h4v48h-4z" />
+</vector>

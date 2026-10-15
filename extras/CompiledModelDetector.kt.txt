@@ -1,0 +1,84 @@
+// OPTIONAL: LiteRT 2.x CompiledModel backend (NOT compiled by default).
+//
+// Why it is not the default: the CompiledModel Kotlin API (com.google.ai.edge.litert:litert 2.x)
+// is the recommended path in 2026, but its surface has been moving between 2.0 → 2.3 and could
+// not be compile-verified offline for this project. The stable Interpreter API used in
+// YoloDetector.kt (LiteRT 1.x artifacts, org.tensorflow.lite.*) is known-good.
+//
+// To try it:
+//   1. In gradle/libs.versions.toml replace the three litert 1.x libraries with
+//        litert-next = { group = "com.google.ai.edge.litert", name = "litert", version = "2.2.0" }
+//      (2.x also ships the Interpreter API for compatibility; verify on your version — if not,
+//       keep both and resolve duplicate-class conflicts).
+//   2. Copy this file to app/src/main/java/com/drivesentinel/perception/detector/ and rename to .kt.
+//   3. In PerceptionEngine.ensureModels(), construct CompiledModelDetector instead of YoloDetector.
+//   4. Check the names below against the LiteRT release notes for your version.
+package com.drivesentinel.perception.detector
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import com.google.ai.edge.litert.Accelerator
+import com.google.ai.edge.litert.CompiledModel
+
+class CompiledModelDetector(
+    context: Context,
+    labels: List<String>,
+    /** Must match the exported model; CompiledModel exposes no shape query in early 2.x. */
+    private val inputWidth: Int = 640,
+    private val inputHeight: Int = 640,
+    private val outputShape: IntArray = intArrayOf(1, 84, 8400), // or [1, 300, 6] for YOLO26
+    modelAsset: String = YoloDetector.MODEL_ASSET,
+) : AutoCloseable {
+
+    val accelerator: String
+    private val model: CompiledModel
+
+    init {
+        // GPU first, CPU fallback. (Accelerator.NPU needs the vendor dispatch libraries.)
+        var acc = "GPU"
+        model = try {
+            CompiledModel.create(context.assets, modelAsset, CompiledModel.Options(Accelerator.GPU))
+        } catch (t: Throwable) {
+            acc = "CPU"
+            CompiledModel.create(context.assets, modelAsset, CompiledModel.Options(Accelerator.CPU))
+        }
+        accelerator = acc
+    }
+
+    private val inputBuffers = model.createInputBuffers()
+    private val outputBuffers = model.createOutputBuffers()
+    private val decoder = YoloOutputDecoder(labels)
+    private val letterbox = Bitmap.createBitmap(inputWidth, inputHeight, Bitmap.Config.ARGB_8888)
+    private val canvas = Canvas(letterbox)
+    private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val pixels = IntArray(inputWidth * inputHeight)
+    private val input = FloatArray(inputWidth * inputHeight * 3)
+
+    fun detect(frame: Bitmap): List<Detection> {
+        val lb = Letterbox(frame.width, frame.height, inputWidth, inputHeight)
+        canvas.drawColor(Color.rgb(114, 114, 114))
+        canvas.drawBitmap(frame, null, RectF(lb.padX, lb.padY, lb.padX + lb.scaledWidth, lb.padY + lb.scaledHeight), paint)
+        letterbox.getPixels(pixels, 0, inputWidth, 0, 0, inputWidth, inputHeight)
+        var j = 0
+        for (p in pixels) {
+            input[j++] = (p shr 16 and 0xFF) / 255f
+            input[j++] = (p shr 8 and 0xFF) / 255f
+            input[j++] = (p and 0xFF) / 255f
+        }
+        inputBuffers[0].writeFloat(input)
+        model.run(inputBuffers, outputBuffers)
+        val out = outputBuffers[0].readFloat()
+        return decoder.decode(out, outputShape, lb)
+    }
+
+    override fun close() {
+        inputBuffers.forEach { it.close() }
+        outputBuffers.forEach { it.close() }
+        model.close()
+        letterbox.recycle()
+    }
+}
