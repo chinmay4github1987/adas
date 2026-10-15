@@ -1,7 +1,12 @@
 package com.drivesentinel.ui.settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,16 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,7 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,7 +45,14 @@ import com.drivesentinel.data.settings.BrakeSensitivity
 import com.drivesentinel.data.settings.SettingsRepository
 import com.drivesentinel.perception.fcw.FcwSensitivity
 import com.drivesentinel.session.DriveSession
+import com.drivesentinel.ui.common.ScreenHeader
+import com.drivesentinel.ui.common.SectionHeading
+import com.drivesentinel.ui.common.TechLabel
 import com.drivesentinel.ui.common.appViewModel
+import com.drivesentinel.ui.common.cockpitBackground
+import com.drivesentinel.ui.common.glass
+import com.drivesentinel.ui.common.techShape
+import com.drivesentinel.ui.theme.Cockpit
 import com.drivesentinel.ui.theme.Neon
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -70,20 +82,24 @@ fun SettingsScreen(onBack: () -> Unit) {
     val locked by vm.locked.collectAsStateWithLifecycle()
     val enabled = !locked
 
-    Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White) }
-            Text("Settings", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-        }
+    Column(Modifier.fillMaxSize().cockpitBackground().safeDrawingPadding()) {
+        ScreenHeader(title = "Settings", subtitle = "System configuration", onBack = onBack)
         if (locked) {
-            Box(
+            Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                    .background(Neon.Amber.copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(12.dp),
+                    .glass(techShape(8.dp), edge = Neon.Amber, fill = Neon.Amber.copy(alpha = 0.1f)).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Settings are locked while the vehicle is moving.", color = Neon.Amber, fontWeight = FontWeight.Bold)
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = Neon.Amber)
+                Spacer(Modifier.width(10.dp))
+                Text("Locked while the vehicle is moving", color = Neon.Amber, fontWeight = FontWeight.Bold)
             }
         }
-        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             item { Section("Speed") }
             item {
                 SliderRow(
@@ -133,7 +149,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             item {
                 Text(
                     "Driver assistance only — may fail to warn or warn falsely. Keep the phone mounted; do not interact while driving.",
-                    color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp),
+                    color = Cockpit.TextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
         }
@@ -141,21 +157,42 @@ fun SettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String) {
-    Column(Modifier.padding(top = 16.dp, bottom = 4.dp)) {
-        Text(title.uppercase(), color = Neon.Cyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        HorizontalDivider(color = Neon.Cyan.copy(alpha = 0.3f))
+private fun Section(title: String) = SectionHeading(title)
+
+/** Glass card that holds one setting. */
+@Composable
+private fun SettingCard(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().glass(techShape(10.dp), edge = Cockpit.EdgeDim).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        content()
     }
 }
 
 @Composable
 private fun SwitchRow(title: String, hint: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 16.sp)
-            Text(hint, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+    SettingCard {
+        // The whole row toggles, not just the switch thumb.
+        Row(
+            Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Cockpit.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(hint, color = Cockpit.TextMuted, fontSize = 12.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.Black,
+                    checkedTrackColor = Neon.Cyan,
+                    uncheckedThumbColor = Cockpit.TextMuted,
+                    uncheckedTrackColor = Color(0xFF0F1C2A),
+                    uncheckedBorderColor = Cockpit.Edge,
+                ),
+            )
         }
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 
@@ -172,20 +209,29 @@ private fun SliderRow(
 ) {
     // Local drag state; persist on release to avoid a DataStore write per pixel.
     var drag by remember(value) { mutableFloatStateOf(value) }
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Row {
-            Text(title, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-            Text(valueLabel, color = Neon.Cyan, fontWeight = FontWeight.Bold)
+    SettingCard {
+        Column(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Cockpit.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(valueLabel, color = Neon.Cyan, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, fontSize = 18.sp)
+            }
+            Slider(
+                value = drag,
+                onValueChange = { drag = it },
+                onValueChangeFinished = { onChange(drag) },
+                valueRange = range,
+                steps = steps,
+                enabled = enabled,
+                colors = SliderDefaults.colors(
+                    thumbColor = Neon.Cyan,
+                    activeTrackColor = Neon.Cyan,
+                    inactiveTrackColor = Cockpit.Track,
+                    activeTickColor = Color.Black.copy(alpha = 0.4f),
+                    inactiveTickColor = Cockpit.EdgeDim,
+                ),
+            )
+            Text(hint, color = Cockpit.TextMuted, fontSize = 12.sp)
         }
-        Slider(
-            value = drag,
-            onValueChange = { drag = it },
-            onValueChangeFinished = { onChange(drag) },
-            valueRange = range,
-            steps = steps,
-            enabled = enabled,
-        )
-        Text(hint, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
     }
 }
 
@@ -198,11 +244,32 @@ private fun <E : Enum<E>> ChoiceRow(
     label: (E) -> String = { e -> e.name.lowercase().replaceFirstChar { it.uppercase() } },
     onSelect: (E) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(title, color = Color.White, fontSize = 16.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { o ->
-                FilterChip(selected = o == selected, onClick = { onSelect(o) }, label = { Text(label(o)) }, enabled = enabled)
+    SettingCard {
+        Column(Modifier.fillMaxWidth()) {
+            Text(title, color = Cockpit.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(10.dp))
+            // Segmented control: equal-width options, the selected one glows.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { o ->
+                    val isSelected = o == selected
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .alpha(if (enabled) 1f else 0.4f)
+                            .then(
+                                if (isSelected) {
+                                    Modifier.glass(techShape(8.dp), edge = Neon.Cyan, fill = Neon.Cyan.copy(alpha = 0.18f))
+                                } else {
+                                    Modifier.glass(techShape(8.dp), edge = Cockpit.EdgeDim)
+                                },
+                            )
+                            .selectable(selected = isSelected, enabled = enabled, role = Role.RadioButton) { onSelect(o) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        TechLabel(label(o), color = if (isSelected) Neon.Cyan else Cockpit.TextMuted, fontSize = 11.sp)
+                    }
+                }
             }
         }
     }

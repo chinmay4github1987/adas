@@ -34,6 +34,7 @@ import com.drivesentinel.ui.common.FcwFlash
 import com.drivesentinel.ui.common.HudWindowMode
 import com.drivesentinel.ui.common.NeonSideBars
 import com.drivesentinel.ui.common.SpeedLimitRing
+import com.drivesentinel.ui.common.TechLabel
 import com.drivesentinel.ui.drive.ThermalBadge
 import com.drivesentinel.ui.theme.Neon
 
@@ -82,6 +83,10 @@ fun HudScreen(state: DriveState, settings: AppSettings, onExit: () -> Unit) {
             Box(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 ThermalBadge(state.thermal, state.thermalHeadroom)
             }
+        }
+
+        Box(Modifier.align(Alignment.BottomCenter).padding(16.dp)) {
+            TechLabel("Double-tap to exit", color = Color.White.copy(alpha = 0.3f))
         }
 
         Column(
