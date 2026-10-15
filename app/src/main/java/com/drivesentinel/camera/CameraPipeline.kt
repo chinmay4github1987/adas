@@ -148,7 +148,7 @@ class CameraPipeline(private val context: Context) {
                 this.preview = preview
                 this.imageCapture = if (attempt.withPhoto) photo else null
                 this.recorder = video?.second
-                val st = CameraStatus(bound = true, mode = attempt.mode, focalNormX = focalNormX(camera))
+                val st = CameraStatus(bound = true, mode = attempt.mode, focalNormX = focalNormX(camera, rotation))
                 _status.value = st
                 Log.i(TAG, "Camera bound: ${attempt.mode.description}")
                 return st
@@ -209,11 +209,14 @@ class CameraPipeline(private val context: Context) {
 
     @SuppressLint("UnsafeOptInUsageError")
     @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
-    private fun focalNormX(camera: Camera): Float? = runCatching {
+    private fun focalNormX(camera: Camera, displayRotation: Int): Float? = runCatching {
         val info = Camera2CameraInfo.from(camera.cameraInfo)
         val focal = info.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
         val sensor = info.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-        if (focal != null && sensor != null && sensor.width > 0f) focal / sensor.width else null
+        // Upright frames are rotated by 90/270° in portrait, so image width then spans the sensor height.
+        val quarterTurn = camera.cameraInfo.getSensorRotationDegrees(displayRotation) % 180 != 0
+        val imageWidthMm = if (quarterTurn) sensor?.height else sensor?.width
+        if (focal != null && imageWidthMm != null && imageWidthMm > 0f) focal / imageWidthMm else null
     }.getOrNull()
 
     private companion object {

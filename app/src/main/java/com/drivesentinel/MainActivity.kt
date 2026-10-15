@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -19,11 +20,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.drivesentinel.data.settings.AppSettings
+import com.drivesentinel.ui.common.OrientationLock
 import com.drivesentinel.ui.drive.DriveScreen
 import com.drivesentinel.ui.events.EventsScreen
 import com.drivesentinel.ui.onboarding.DisclaimerScreen
 import com.drivesentinel.ui.settings.SettingsScreen
 import com.drivesentinel.ui.theme.DriveSentinelTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -55,6 +59,10 @@ private fun AppRoot() {
         })
         return
     }
+
+    val driving by remember { container.driveSession.state.map { it.active }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(initialValue = false)
+    OrientationLock(locked = driving)
 
     var screen by rememberSaveable { mutableStateOf(Screen.DRIVE) }
     BackHandler(enabled = screen != Screen.DRIVE) { screen = Screen.DRIVE }

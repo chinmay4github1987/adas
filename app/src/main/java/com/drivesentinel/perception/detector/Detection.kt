@@ -22,10 +22,12 @@ object RoadClasses {
     const val MOTORCYCLE = 3
     const val BUS = 5
     const val TRUCK = 7
+    const val TRAFFIC_LIGHT = 9
+    const val STOP_SIGN = 11
     const val DOG = 16
     const val COW = 19
 
-    val ALLOWED: Set<Int> = setOf(PERSON, BICYCLE, CAR, MOTORCYCLE, BUS, TRUCK, DOG, COW)
+    val ALLOWED: Set<Int> = setOf(PERSON, BICYCLE, CAR, MOTORCYCLE, BUS, TRUCK, TRAFFIC_LIGHT, STOP_SIGN, DOG, COW)
 
     /** Classes that can be the FCW "lead" target (anything in the ego path you could hit). */
     val LEAD_CANDIDATES: Set<Int> = setOf(CAR, MOTORCYCLE, BUS, TRUCK, BICYCLE, COW, PERSON)

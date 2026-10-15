@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -78,14 +80,25 @@ fun Modifier.cockpitBackground(): Modifier = this
 
 /** Small uppercase, letter-spaced label — the "instrument" voice of the UI. */
 @Composable
-fun TechLabel(text: String, color: Color = Cockpit.TextMuted, fontSize: TextUnit = 11.sp, modifier: Modifier = Modifier) {
+fun TechLabel(
+    text: String,
+    color: Color = Cockpit.TextMuted,
+    fontSize: TextUnit = 11.sp,
+    modifier: Modifier = Modifier,
+    letterSpacing: TextUnit = 2.sp,
+    maxLines: Int = Int.MAX_VALUE,
+    textAlign: TextAlign? = null,
+) {
     Text(
         text.uppercase(),
         color = color,
         fontSize = fontSize,
         fontWeight = FontWeight.Bold,
-        letterSpacing = 2.sp,
+        letterSpacing = letterSpacing,
         fontFamily = FontFamily.Monospace,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = textAlign,
         modifier = modifier,
     )
 }
@@ -141,7 +154,7 @@ fun PrimaryActionButton(
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             }
-            .padding(horizontal = 22.dp),
+            .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -153,11 +166,13 @@ fun PrimaryActionButton(
             fontWeight = FontWeight.Black,
             letterSpacing = 1.5.sp,
             fontSize = 16.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-/** Secondary cockpit control: icon over a tech label, 72×64 dp touch target. */
+/** Secondary cockpit control: icon over a tech label, at least 64×64 dp touch target. */
 @Composable
 fun CockpitButton(
     icon: ImageVector,
@@ -171,20 +186,20 @@ fun CockpitButton(
     val shape = techShape(10.dp)
     Column(
         modifier
-            .defaultMinSize(minWidth = 72.dp, minHeight = 64.dp)
+            .defaultMinSize(minWidth = 64.dp, minHeight = 64.dp)
             .alpha(if (enabled) 1f else 0.35f)
             .glass(shape, edge = accent.copy(alpha = 0.5f))
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = label) {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(4.dp))
-        TechLabel(label, color = Cockpit.Text, fontSize = 10.sp)
+        TechLabel(label, color = Cockpit.Text, fontSize = 10.sp, letterSpacing = 1.sp, maxLines = 1)
     }
 }
 

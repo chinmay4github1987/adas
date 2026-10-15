@@ -39,7 +39,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullUser"
             android:theme="@style/Theme.DriveSentinel">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

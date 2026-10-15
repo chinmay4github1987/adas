@@ -18,9 +18,19 @@ import com.drivesentinel.perception.lane.LaneDetector
 import com.drivesentinel.perception.lane.LaneDetectorFactory
 import com.drivesentinel.perception.lane.LaneEstimate
 import com.drivesentinel.perception.lane.LaneStatus
+import com.drivesentinel.perception.detector.RoadClasses
+import com.drivesentinel.perception.signs.LightColor
+import com.drivesentinel.perception.signs.RedRingFinder
+import com.drivesentinel.perception.signs.RoadSignMonitor
+import com.drivesentinel.perception.signs.RoadSignStatus
+import com.drivesentinel.perception.signs.SignEvent
+import com.drivesentinel.perception.signs.SpeedSignReader
+import com.drivesentinel.perception.signs.TrafficLightClassifier
+import com.drivesentinel.core.BBox
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
 enum class DetectorState(val label: String) {
@@ -40,6 +50,9 @@ data class PerceptionFrame(
     val lanes: LaneEstimate = LaneEstimate.NONE,
     val laneStatus: LaneStatus = LaneStatus(),
     val fcw: FcwStatus = FcwStatus(),
+    val signs: RoadSignStatus = RoadSignStatus(),
+    /** Announcements produced by this frame (edge events, not state). */
+    val signEvents: List<SignEvent> = emptyList(),
     val detectorState: DetectorState = DetectorState.LOADING,
     val accelerator: String? = null,
     val inferenceMs: Long = 0L,
@@ -52,6 +65,7 @@ data class PerceptionConfig(
     val fcwEnabled: Boolean = true,
     val fcwSensitivity: FcwSensitivity = FcwSensitivity.MEDIUM,
     val cameraOffset: Float = 0f,
+    val signsEnabled: Boolean = true,
 )
 
 /**
@@ -83,6 +97,9 @@ class PerceptionEngine(private val context: Context) : ImageAnalysis.Analyzer {
     private var laneDetector: LaneDetector? = null
     private val departure = LaneDepartureAnalyzer()
     private val fcw = ForwardCollisionMonitor()
+    private val signs = RoadSignMonitor()
+    private var signReader: SpeedSignReader? = null
+    private val ocrReads = ConcurrentLinkedQueue<Int>()
     private var lastRunMs = 0L
     private var lastSnapshotMs = 0L
     private var fpsEma = 0f
@@ -132,12 +149,10 @@ class PerceptionEngine(private val context: Context) : ImageAnalysis.Analyzer {
                 .getOrNull()
         }.orEmpty()
 
+        // One downscaled frame shared by the lane detector and the sign finder.
+        val small = if (laneDetector != null || cfg.signsEnabled) downscale(bitmap) else null
         val lanes = laneDetector?.let { ld ->
-            val small = Bitmap.createScaledBitmap(bitmap, LANE_W, LANE_H, true)
-            val px = IntArray(LANE_W * LANE_H)
-            small.getPixels(px, 0, LANE_W, 0, 0, LANE_W, LANE_H)
-            if (small !== bitmap) small.recycle()
-            runCatching { ld.detect(ArgbFrame(LANE_W, LANE_H, px), now) }.getOrDefault(LaneEstimate.NONE)
+            small?.let { runCatching { ld.detect(it, now) }.getOrDefault(LaneEstimate.NONE) }
         } ?: LaneEstimate.NONE
 
         val laneStatus = departure.update(lanes, speed, now, cfg.laneAssistEnabled)
@@ -146,6 +161,14 @@ class PerceptionEngine(private val context: Context) : ImageAnalysis.Analyzer {
             fcw.update(detections, lanes, speed, aspect, now)
         } else {
             FcwStatus()
+        }
+
+        val signUpdate = if (cfg.signsEnabled) {
+            processSigns(bitmap, small, detections, speed, now)
+        } else {
+            signs.reset()
+            ocrReads.clear()
+            null
         }
 
         publish(
@@ -157,12 +180,74 @@ class PerceptionEngine(private val context: Context) : ImageAnalysis.Analyzer {
                 lanes = lanes,
                 laneStatus = laneStatus,
                 fcw = fcwStatus,
+                signs = signUpdate?.status ?: RoadSignStatus(),
+                signEvents = signUpdate?.events.orEmpty(),
                 detectorState = detectorState,
                 accelerator = detector?.accelerator,
                 inferenceMs = detector?.lastLatencyMs ?: 0L,
                 aiFps = fpsEma,
             ),
         )
+    }
+
+    private fun downscale(bitmap: Bitmap): ArgbFrame {
+        val scaled = Bitmap.createScaledBitmap(bitmap, LANE_W, LANE_H, true)
+        val px = IntArray(LANE_W * LANE_H)
+        scaled.getPixels(px, 0, LANE_W, 0, 0, LANE_W, LANE_H)
+        if (scaled !== bitmap) scaled.recycle()
+        return ArgbFrame(LANE_W, LANE_H, px)
+    }
+
+    /** Traffic lights + STOP from the detector; speed-limit boards via red-ring finder + OCR. */
+    private fun processSigns(
+        bitmap: Bitmap,
+        small: ArgbFrame?,
+        detections: List<Detection>,
+        speed: Float,
+        now: Long,
+    ): RoadSignMonitor.Update {
+        while (true) signs.onSpeedRead(ocrReads.poll() ?: break, now)
+
+        val light = detections
+            .filter { it.classId == RoadClasses.TRAFFIC_LIGHT && it.score >= 0.4f }
+            .maxByOrNull { it.box.area }
+            ?.let { classifyLight(bitmap, it.box) }
+        val stop = detections.any { it.classId == RoadClasses.STOP_SIGN && it.score >= 0.5f }
+
+        val reader = signReader ?: SpeedSignReader { ocrReads.add(it) }.also { signReader = it }
+        if (small != null && reader.canSubmit(now)) {
+            RedRingFinder.find(small).firstOrNull()?.let { ring -> crop(bitmap, ring, margin = 0.15f, minSide = 160)?.let { reader.submit(it, now) } }
+        }
+        return signs.update(light, stop, speed, now)
+    }
+
+    private fun classifyLight(bitmap: Bitmap, box: BBox): LightColor {
+        val c = crop(bitmap, box, margin = 0f, minSide = 0, maxSide = 48) ?: return LightColor.UNKNOWN
+        val px = IntArray(c.width * c.height)
+        c.getPixels(px, 0, c.width, 0, 0, c.width, c.height)
+        c.recycle()
+        return TrafficLightClassifier.classify(px, c.width, c.height)
+    }
+
+    /** Crops a normalized box (+ margin) and rescales so its longer side is within [minSide, maxSide]. */
+    private fun crop(bitmap: Bitmap, box: BBox, margin: Float, minSide: Int, maxSide: Int = Int.MAX_VALUE): Bitmap? {
+        val mx = box.width * margin
+        val my = box.height * margin
+        val b = BBox(box.left - mx, box.top - my, box.right + mx, box.bottom + my).clamped()
+        val x = (b.left * bitmap.width).toInt()
+        val y = (b.top * bitmap.height).toInt()
+        val w = ((b.right * bitmap.width).toInt() - x).coerceAtMost(bitmap.width - x)
+        val h = ((b.bottom * bitmap.height).toInt() - y).coerceAtMost(bitmap.height - y)
+        if (w < 2 || h < 2) return null
+        // createBitmap returns the source itself for a full-frame crop; never hand that out to be recycled.
+        val raw = Bitmap.createBitmap(bitmap, x, y, w, h).let { if (it === bitmap) it.copy(Bitmap.Config.ARGB_8888, false) else it }
+        val side = maxOf(w, h)
+        val target = side.coerceIn(minSide, maxSide)
+        if (target == side) return raw
+        val scale = target.toFloat() / side
+        val scaled = Bitmap.createScaledBitmap(raw, maxOf(1, (w * scale).toInt()), maxOf(1, (h * scale).toInt()), true)
+        if (scaled !== raw) raw.recycle()
+        return scaled
     }
 
     private fun publish(frame: PerceptionFrame) {
@@ -200,6 +285,10 @@ class PerceptionEngine(private val context: Context) : ImageAnalysis.Analyzer {
         detector = null
         laneDetector?.close()
         laneDetector = null
+        signReader?.close()
+        signReader = null
+        signs.reset()
+        ocrReads.clear()
         detectorState = DetectorState.LOADING
         fcw.reset()
         departure.reset()

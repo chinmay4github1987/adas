@@ -2,6 +2,7 @@ package com.drivesentinel.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -114,6 +116,14 @@ fun SettingsScreen(onBack: () -> Unit) {
             item { Section("Driver assistance") }
             item { SwitchRow("Lane assist", "Lane drift / lane change detection above 40 km/h.", s.laneAssistEnabled, enabled) { v -> vm.update { it.copy(laneAssistEnabled = v) } } }
             item { SwitchRow("Forward collision warning", "Warn at TTC < 2.7 s, critical < 1.5 s, above 15 km/h.", s.fcwEnabled, enabled) { v -> vm.update { it.copy(fcwEnabled = v) } } }
+            item {
+                SwitchRow(
+                    "Traffic lights & signs",
+                    "Announces red/amber/green lights and STOP signs, and reads speed-limit boards — a read limit replaces the overspeed limit for the rest of the drive.",
+                    s.signAlertsEnabled,
+                    enabled,
+                ) { v -> vm.update { it.copy(signAlertsEnabled = v) } }
+            }
             item {
                 ChoiceRow("FCW sensitivity", FcwSensitivity.entries, s.fcwSensitivity, enabled) { v -> vm.update { it.copy(fcwSensitivity = v) } }
             }
@@ -255,7 +265,7 @@ private fun <E : Enum<E>> ChoiceRow(
                     Box(
                         Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .defaultMinSize(minHeight = 48.dp)
                             .alpha(if (enabled) 1f else 0.4f)
                             .then(
                                 if (isSelected) {
@@ -267,7 +277,14 @@ private fun <E : Enum<E>> ChoiceRow(
                             .selectable(selected = isSelected, enabled = enabled, role = Role.RadioButton) { onSelect(o) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        TechLabel(label(o), color = if (isSelected) Neon.Cyan else Cockpit.TextMuted, fontSize = 11.sp)
+                        TechLabel(
+                            label(o),
+                            color = if (isSelected) Neon.Cyan else Cockpit.TextMuted,
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                        )
                     }
                 }
             }

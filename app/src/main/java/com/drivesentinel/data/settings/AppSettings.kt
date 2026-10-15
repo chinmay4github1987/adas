@@ -13,6 +13,8 @@ data class AppSettings(
     val hudMirror: Boolean = true,
     val laneAssistEnabled: Boolean = true,
     val fcwEnabled: Boolean = true,
+    /** Announce traffic lights / STOP signs and read speed-limit boards (applied for the drive). */
+    val signAlertsEnabled: Boolean = true,
     val fcwSensitivity: FcwSensitivity = FcwSensitivity.MEDIUM,
     val brakeSensitivity: BrakeSensitivity = BrakeSensitivity.MEDIUM,
     /** Trigger hard-brake events from the accelerometer alone (no GPS speed-drop confirmation). */

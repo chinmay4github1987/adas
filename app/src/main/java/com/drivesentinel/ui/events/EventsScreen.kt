@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -115,12 +116,15 @@ fun EventsScreen(onBack: () -> Unit) {
                 }
             }
         } else {
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(events, key = { it.id }) { e -> EventRow(e, onDelete = { pendingDelete = e }) }
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val compact = maxWidth < 600.dp
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(events, key = { it.id }) { e -> EventRow(e, compact, onDelete = { pendingDelete = e }) }
+                }
             }
         }
     }
@@ -145,7 +149,7 @@ fun EventsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun EventRow(e: DriveEvent, onDelete: () -> Unit) {
+private fun EventRow(e: DriveEvent, compact: Boolean, onDelete: () -> Unit) {
     val context = LocalContext.current
     val thumb by produceState<ImageBitmap?>(null, e.thumbnailPath) {
         value = withContext(Dispatchers.IO) {
@@ -157,71 +161,95 @@ private fun EventRow(e: DriveEvent, onDelete: () -> Unit) {
         EventTrigger.FCW_CRITICAL -> Neon.Red
         EventTrigger.MANUAL -> Neon.Cyan
     }
-    Row(
-        Modifier.fillMaxWidth().glass(techShape(14.dp), edge = color.copy(alpha = 0.5f)).padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.width(168.dp).height(94.dp).clip(techShape(10.dp)).background(Color(0xFF0F1C2A))
-                .then(if (e.videoUri != null) Modifier.clickable(role = Role.Button) { open(context, e.videoUri, "video/mp4") } else Modifier),
-            contentAlignment = Alignment.Center,
-        ) {
-            thumb?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)))))
-            if (e.videoUri != null) {
-                Icon(AppIcons.Play, contentDescription = "Play clip", tint = Color.White, modifier = Modifier.size(36.dp))
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
+    val actions: @Composable (Modifier) -> Unit = { m ->
+        e.videoUri?.let { uri -> RowAction(AppIcons.Play, "Play", Neon.Cyan, m) { open(context, uri, "video/mp4") } }
+        e.photoUris.firstOrNull()?.let { uri -> RowAction(AppIcons.Photo, "Photo", Neon.Cyan, m) { open(context, uri, "image/jpeg") } }
+        RowAction(Icons.Filled.Delete, "Delete", Neon.Red, m, onDelete)
+    }
+    val card = Modifier.fillMaxWidth().glass(techShape(14.dp), edge = color.copy(alpha = 0.5f)).padding(12.dp)
+
+    if (compact) {
+        // Portrait: thumbnail + details on top, full-width action bar below.
+        Column(card, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                GlowDot(color, size = 8.dp)
-                Spacer(Modifier.width(8.dp))
-                TechLabel(e.trigger.label, color = color, fontSize = 13.sp)
+                Thumbnail(e, thumb, Modifier.width(120.dp).height(68.dp))
+                Spacer(Modifier.width(12.dp))
+                EventDetails(e, color, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                DateFormat.getDateTimeInstance().format(Date(e.wallTimeMs)),
-                color = Cockpit.Text,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            val details = buildList {
-                e.speedKmh?.let { add("${it.toInt()} km/h") }
-                e.peakDecelG?.let { add("%.2f g".format(it)) }
-                e.speedDropKmh?.let { add("−${it.toInt()} km/h") }
-                e.ttcSeconds?.let { add("TTC %.1f s".format(it)) }
-                e.leadLabel?.let { add(it) }
-                if (e.latitude != null && e.longitude != null) add("%.5f, %.5f".format(e.latitude, e.longitude))
-                add("%.1f MB".format(e.sizeBytes / 1_048_576f))
-            }
-            Text(details.joinToString("  ·  "), color = Cockpit.TextMuted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            if (e.videoUri == null) TechLabel("Photos only · video unavailable", color = Neon.Amber, fontSize = 10.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions(Modifier.weight(1f)) }
         }
-        Spacer(Modifier.width(8.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            e.videoUri?.let { uri -> RowAction(AppIcons.Play, "Play", Neon.Cyan) { open(context, uri, "video/mp4") } }
-            e.photoUris.firstOrNull()?.let { uri -> RowAction(AppIcons.Photo, "Photo", Neon.Cyan) { open(context, uri, "image/jpeg") } }
-            RowAction(Icons.Filled.Delete, "Delete", Neon.Red, onDelete)
+    } else {
+        Row(card, verticalAlignment = Alignment.CenterVertically) {
+            Thumbnail(e, thumb, Modifier.width(168.dp).height(94.dp))
+            Spacer(Modifier.width(14.dp))
+            EventDetails(e, color, Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { actions(Modifier.widthIn(min = 108.dp)) }
         }
+    }
+}
+
+@Composable
+private fun Thumbnail(e: DriveEvent, thumb: ImageBitmap?, modifier: Modifier) {
+    val context = LocalContext.current
+    val video = e.videoUri
+    Box(
+        modifier.clip(techShape(10.dp)).background(Color(0xFF0F1C2A))
+            .then(if (video != null) Modifier.clickable(role = Role.Button) { open(context, video, "video/mp4") } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        thumb?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)))))
+        if (video != null) {
+            Icon(AppIcons.Play, contentDescription = "Play clip", tint = Color.White, modifier = Modifier.size(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun EventDetails(e: DriveEvent, color: Color, modifier: Modifier) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlowDot(color, size = 8.dp)
+            Spacer(Modifier.width(8.dp))
+            TechLabel(e.trigger.label, color = color, fontSize = 13.sp, maxLines = 1)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            DateFormat.getDateTimeInstance().format(Date(e.wallTimeMs)),
+            color = Cockpit.Text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        val details = buildList {
+            e.speedKmh?.let { add("${it.toInt()} km/h") }
+            e.peakDecelG?.let { add("%.2f g".format(it)) }
+            e.speedDropKmh?.let { add("−${it.toInt()} km/h") }
+            e.ttcSeconds?.let { add("TTC %.1f s".format(it)) }
+            e.leadLabel?.let { add(it) }
+            if (e.latitude != null && e.longitude != null) add("%.5f, %.5f".format(e.latitude, e.longitude))
+            add("%.1f MB".format(e.sizeBytes / 1_048_576f))
+        }
+        Text(details.joinToString("  ·  "), color = Cockpit.TextMuted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        if (e.videoUri == null) TechLabel("Photos only · video unavailable", color = Neon.Amber, fontSize = 10.sp)
     }
 }
 
 /** Compact labelled action with a 48 dp touch height. */
 @Composable
-private fun RowAction(icon: ImageVector, label: String, accent: Color, onClick: () -> Unit) {
+private fun RowAction(icon: ImageVector, label: String, accent: Color, modifier: Modifier, onClick: () -> Unit) {
     Row(
-        Modifier
+        modifier
             .height(48.dp)
-            .widthIn(min = 108.dp)
             .glass(techShape(8.dp), edge = accent.copy(alpha = 0.5f))
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
-        TechLabel(label, color = accent, fontSize = 11.sp)
+        TechLabel(label, color = accent, fontSize = 11.sp, letterSpacing = 1.sp, maxLines = 1)
     }
 }
 

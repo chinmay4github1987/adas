@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +37,7 @@ import com.drivesentinel.ui.common.NeonSideBars
 import com.drivesentinel.ui.common.SpeedLimitRing
 import com.drivesentinel.ui.common.TechLabel
 import com.drivesentinel.ui.drive.ThermalBadge
+import com.drivesentinel.ui.drive.lightColor
 import com.drivesentinel.ui.theme.Neon
 
 /**
@@ -53,7 +55,7 @@ fun HudScreen(state: DriveState, settings: AppSettings, onExit: () -> Unit) {
     val changing = lane.isChanging && !lane.suppressed
     val holdLane = changing && fcw != FcwLevel.NONE
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
@@ -70,14 +72,24 @@ fun HudScreen(state: DriveState, settings: AppSettings, onExit: () -> Unit) {
             )
         }
         FcwFlash(fcw)
+        // Portrait phones are ~360-420 dp wide: scale the glyphs so nothing clips.
+        val compact = maxWidth < 600.dp
 
         // Speed-limit ring (top-right of the *reflected* image).
         Box(Modifier.align(Alignment.TopEnd).padding(28.dp)) {
-            SpeedLimitRing(settings.speedLimitKmh, 110.dp, highContrast = true, flashing = state.overspeed)
+            SpeedLimitRing(if (state.active) state.speedLimitKmh else settings.speedLimitKmh, if (compact) 80.dp else 110.dp, highContrast = true, flashing = state.overspeed)
         }
         // FCW indicator (top-left).
         Box(Modifier.align(Alignment.TopStart).padding(28.dp)) {
-            FcwIndicator(fcw)
+            Column {
+                FcwIndicator(fcw, compact)
+                state.perception.signs.light?.let {
+                    Text("● ${it.name}", color = lightColor(it), fontSize = if (compact) 28.sp else 40.sp, fontWeight = FontWeight.Black)
+                }
+                if (state.perception.signs.stopSign) {
+                    Text("STOP", color = Neon.Red, fontSize = if (compact) 28.sp else 40.sp, fontWeight = FontWeight.Black)
+                }
+            }
         }
         if (state.thermal >= ThermalLevel.HOT) {
             Box(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
@@ -96,54 +108,59 @@ fun HudScreen(state: DriveState, settings: AppSettings, onExit: () -> Unit) {
             Text(
                 text = if (state.speed.gpsFix) state.speed.kmh.toInt().toString() else "--",
                 color = if (state.overspeed) Neon.Red else Color.White,
-                fontSize = 190.sp,
-                lineHeight = 190.sp,
+                fontSize = if (compact) 130.sp else 190.sp,
+                lineHeight = if (compact) 130.sp else 190.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
             )
             Text("km/h", color = Color.White.copy(alpha = 0.8f), fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
-            LaneGuidance(lane.state, changing, holdLane, lane.suppressed)
+            LaneGuidance(lane.state, changing, holdLane, lane.suppressed, compact)
         }
     }
 }
 
 @Composable
-private fun FcwIndicator(level: FcwLevel) {
+private fun FcwIndicator(level: FcwLevel, compact: Boolean) {
     val (text, color) = when (level) {
         FcwLevel.NONE -> "FCW" to Color.White.copy(alpha = 0.25f)
         FcwLevel.WARNING -> "CAUTION" to Neon.Amber
         FcwLevel.CRITICAL -> "BRAKE!" to Neon.Red
     }
-    Text(text, color = color, fontSize = if (level == FcwLevel.CRITICAL) 64.sp else 40.sp, fontWeight = FontWeight.Black)
+    Text(text, color = color, fontSize = when {
+        level == FcwLevel.CRITICAL -> if (compact) 44.sp else 64.sp
+        else -> if (compact) 28.sp else 40.sp
+    }, fontWeight = FontWeight.Black)
 }
 
 @Composable
-private fun LaneGuidance(state: LaneState, changing: Boolean, holdLane: Boolean, suppressed: Boolean) {
+private fun LaneGuidance(state: LaneState, changing: Boolean, holdLane: Boolean, suppressed: Boolean, compact: Boolean) {
+    val big = if (compact) 28.sp else 40.sp
+    val arrow = if (compact) Modifier.size(width = 72.dp, height = 40.dp) else Modifier.size(width = 180.dp, height = 70.dp)
     when {
         holdLane -> {
-            Text("HOLD LANE", color = Neon.Red, fontSize = 56.sp, fontWeight = FontWeight.Black)
+            Text("HOLD LANE", color = Neon.Red, fontSize = if (compact) 40.sp else 56.sp, fontWeight = FontWeight.Black)
         }
         changing -> {
             val dir = if (state == LaneState.CHANGING_LEFT) ArrowDirection.LEFT else ArrowDirection.RIGHT
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                if (dir == ArrowDirection.LEFT) ChevronArrows(dir, Neon.Cyan, Modifier.size(width = 180.dp, height = 70.dp))
+                if (dir == ArrowDirection.LEFT) ChevronArrows(dir, Neon.Cyan, arrow)
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    "Lane change ${if (dir == ArrowDirection.LEFT) "LEFT" else "RIGHT"}",
+                    "${if (compact) "" else "Lane change "}${if (dir == ArrowDirection.LEFT) "LEFT" else "RIGHT"}",
                     color = Neon.Cyan,
-                    fontSize = 40.sp,
+                    fontSize = big,
                     fontWeight = FontWeight.Black,
                 )
                 Spacer(Modifier.width(12.dp))
-                if (dir == ArrowDirection.RIGHT) ChevronArrows(dir, Neon.Cyan, Modifier.size(width = 180.dp, height = 70.dp))
+                if (dir == ArrowDirection.RIGHT) ChevronArrows(dir, Neon.Cyan, arrow)
             }
         }
         !suppressed && (state == LaneState.LEFT_DRIFT || state == LaneState.RIGHT_DRIFT) -> {
             Text(
                 if (state == LaneState.LEFT_DRIFT) "◀ DRIFTING LEFT" else "DRIFTING RIGHT ▶",
                 color = Neon.Amber,
-                fontSize = 40.sp,
+                fontSize = big,
                 fontWeight = FontWeight.Black,
             )
         }

@@ -21,6 +21,8 @@ import com.drivesentinel.perception.PerceptionEngine
 import com.drivesentinel.perception.PerceptionFrame
 import com.drivesentinel.perception.fcw.FcwLevel
 import com.drivesentinel.perception.lane.LaneState
+import com.drivesentinel.perception.signs.LightColor
+import com.drivesentinel.perception.signs.SignEvent
 import com.drivesentinel.sensors.location.LocationSource
 import com.drivesentinel.sensors.location.SpeedSmoother
 import com.drivesentinel.sensors.location.toSpeedSample
@@ -91,6 +93,8 @@ class DriveSession(
     private val thermalPolicy = ThermalPolicy()
     @Volatile private var lastLocation: Location? = null
     @Volatile private var settings = AppSettings()
+    /** Limit read from a sign board this drive; overrides the Settings value until the drive ends. */
+    @Volatile private var signLimitKmh: Int? = null
 
     // Analysis-thread alert edge detection.
     private var lastFcwLevel = FcwLevel.NONE
@@ -116,6 +120,7 @@ class DriveSession(
         speedSmoother.reset(); overspeed.reset(); brakeDetector.reset()
         lastFcwLevel = FcwLevel.NONE
         lastLaneState = LaneState.CENTERED
+        signLimitKmh = null
         analysis.execute { perception.rearm() }
         perception.onFrame = ::onPerceptionFrame
         _state.value = DriveState(active = true)
@@ -125,7 +130,7 @@ class DriveSession(
             settingsRepository.settings.collect { st ->
                 settings = st
                 withContext(logic) {
-                    overspeed.thresholdKmh = st.speedLimitKmh.toFloat()
+                    overspeed.thresholdKmh = (signLimitKmh ?: st.speedLimitKmh).toFloat()
                     brakeDetector.config = brakeDetector.config.copy(
                         thresholdG = st.brakeSensitivity.thresholdG,
                         accelOnly = st.brakeAccelOnly,
@@ -137,8 +142,9 @@ class DriveSession(
                     fcwEnabled = st.fcwEnabled,
                     fcwSensitivity = st.fcwSensitivity,
                     cameraOffset = st.cameraOffset,
+                    signsEnabled = st.signAlertsEnabled,
                 )
-                _state.update { it.copy(speedLimitKmh = st.speedLimitKmh) }
+                _state.update { it.copy(speedLimitKmh = signLimitKmh ?: st.speedLimitKmh) }
             }
         }
 
@@ -287,6 +293,27 @@ class DriveSession(
                 voice.announce(VoiceAlert(if (lane == LaneState.LEFT_DRIFT) "Drifting left" else "Drifting right"))
             }
             lastLaneState = lane
+        }
+
+        f.signEvents.forEach(::onSignEvent)
+    }
+
+    private fun onSignEvent(e: SignEvent) {
+        when (e) {
+            is SignEvent.Light -> when (e.color) {
+                LightColor.RED -> voice.announce(VoiceAlert("Red light ahead"))
+                LightColor.AMBER -> voice.announce(VoiceAlert("Amber light"))
+                LightColor.GREEN -> voice.announce(VoiceAlert("Green light"))
+                LightColor.UNKNOWN -> Unit
+            }
+            SignEvent.StopSign -> voice.announce(VoiceAlert("Stop sign ahead"))
+            is SignEvent.SpeedLimit -> {
+                voice.announce(VoiceAlert("Speed limit ${e.kmh}"))
+                signLimitKmh = e.kmh
+                val logic = logicDispatcher ?: return
+                scope?.launch(logic) { overspeed.thresholdKmh = e.kmh.toFloat() }
+                _state.update { it.copy(speedLimitKmh = e.kmh, limitFromSign = true) }
+            }
         }
     }
 

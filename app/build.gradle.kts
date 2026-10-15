@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.litert)
     implementation(libs.litert.gpu)
     implementation(libs.litert.gpu.api)
+    implementation(libs.mlkit.text.recognition)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

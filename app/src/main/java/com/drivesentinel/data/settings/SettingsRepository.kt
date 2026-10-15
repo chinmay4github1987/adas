@@ -29,6 +29,7 @@ class SettingsRepository(context: Context) {
         val HUD_MIRROR = booleanPreferencesKey("hud_mirror")
         val LANE_ASSIST = booleanPreferencesKey("lane_assist")
         val FCW_ENABLED = booleanPreferencesKey("fcw_enabled")
+        val SIGN_ALERTS = booleanPreferencesKey("sign_alerts")
         val FCW_SENSITIVITY = stringPreferencesKey("fcw_sensitivity")
         val BRAKE_SENSITIVITY = stringPreferencesKey("brake_sensitivity")
         val BRAKE_ACCEL_ONLY = booleanPreferencesKey("brake_accel_only")
@@ -51,6 +52,7 @@ class SettingsRepository(context: Context) {
             prefs[Keys.HUD_MIRROR] = next.hudMirror
             prefs[Keys.LANE_ASSIST] = next.laneAssistEnabled
             prefs[Keys.FCW_ENABLED] = next.fcwEnabled
+            prefs[Keys.SIGN_ALERTS] = next.signAlertsEnabled
             prefs[Keys.FCW_SENSITIVITY] = next.fcwSensitivity.name
             prefs[Keys.BRAKE_SENSITIVITY] = next.brakeSensitivity.name
             prefs[Keys.BRAKE_ACCEL_ONLY] = next.brakeAccelOnly
@@ -69,6 +71,7 @@ class SettingsRepository(context: Context) {
             hudMirror = this[Keys.HUD_MIRROR] ?: d.hudMirror,
             laneAssistEnabled = this[Keys.LANE_ASSIST] ?: d.laneAssistEnabled,
             fcwEnabled = this[Keys.FCW_ENABLED] ?: d.fcwEnabled,
+            signAlertsEnabled = this[Keys.SIGN_ALERTS] ?: d.signAlertsEnabled,
             fcwSensitivity = enumOr(this[Keys.FCW_SENSITIVITY], d.fcwSensitivity),
             brakeSensitivity = enumOr(this[Keys.BRAKE_SENSITIVITY], d.brakeSensitivity),
             brakeAccelOnly = this[Keys.BRAKE_ACCEL_ONLY] ?: d.brakeAccelOnly,

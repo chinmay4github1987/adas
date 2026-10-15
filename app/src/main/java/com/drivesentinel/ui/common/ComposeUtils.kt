@@ -3,6 +3,7 @@ package com.drivesentinel.ui.common
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -38,6 +39,21 @@ fun KeepScreenOn(enabled: Boolean) {
     DisposableEffect(view, enabled) {
         view.keepScreenOn = enabled
         onDispose { view.keepScreenOn = false }
+    }
+}
+
+/**
+ * Locks the screen to its current orientation while [locked]; otherwise follows the sensor
+ * (respecting the user's auto-rotate setting). The camera binds with the rotation at drive start,
+ * so rotating mid-drive would misalign recording and perception.
+ */
+@Composable
+fun OrientationLock(locked: Boolean) {
+    val activity = LocalContext.current.findActivity() ?: return
+    DisposableEffect(activity, locked) {
+        activity.requestedOrientation =
+            if (locked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        onDispose { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER }
     }
 }
 

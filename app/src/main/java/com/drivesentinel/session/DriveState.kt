@@ -11,6 +11,8 @@ data class DriveState(
     val active: Boolean = false,
     val speed: SpeedState = SpeedState(),
     val speedLimitKmh: Int = 80,
+    /** True when [speedLimitKmh] was read from a sign board this drive (else it is the Settings value). */
+    val limitFromSign: Boolean = false,
     val overspeed: Boolean = false,
     val perception: PerceptionFrame = PerceptionFrame(),
     val thermal: ThermalLevel = ThermalLevel.NORMAL,
